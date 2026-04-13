@@ -1,0 +1,32 @@
+{
+  "id": "7e41af8e-a97b-4c4b-a167-4c3109593258",
+  "version": "0.1.0",
+  "platform": "all",
+  "arch": "all",
+  "name": "图片尺寸批量调整",
+  "logo": "/logo.png",
+  "keywords": [
+    "image",
+    "resize",
+    "dimension",
+    "batch",
+    "eagle"
+  ],
+  "devTools": false,
+  "main": {
+    "url": "index.html",
+    "width": 1120,
+    "height": 760,
+    "minWidth": 980,
+    "minHeight": 620,
+    "resizable": true,
+    "maximizable": true,
+    "minimizable": true,
+    "fullscreenable": true,
+    "alwaysOnTop": false,
+    "frame": true,
+    "backgroundColor": "#35363a",
+    "multiple": false,
+    "runAfterInstall": false
+  }
+}

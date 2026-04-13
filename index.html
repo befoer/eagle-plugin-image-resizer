@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片尺寸批量调整</title>
+    <link rel="stylesheet" href="styles/plugin.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <main class="plugin-frame">
+        <section class="workspace">
+          <section class="settings-panel">
+            <div class="panel-head">
+              <strong>输出设置</strong>
+              <span id="selectionHint" class="panel-hint"></span>
+            </div>
+
+            <div class="dimension-grid">
+              <label class="field">
+                <span class="field-label">最大宽度</span>
+                <input id="maxWidthInput" class="field-input" type="number" min="1" placeholder="例如 2048" />
+              </label>
+
+              <button
+                id="dimensionLockButton"
+                class="dimension-lock-button locked"
+                type="button"
+                aria-label="锁定宽高联动"
+                aria-pressed="true"
+                title="锁定后，输入一个尺寸会同步到另一个尺寸"
+              >
+                <svg class="dimension-lock-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 10V7.75C8 5.68 9.68 4 11.75 4C13.82 4 15.5 5.68 15.5 7.75V10" />
+                  <rect x="6.5" y="10" width="10.5" height="9" rx="2.2" />
+                </svg>
+              </button>
+
+              <label class="field">
+                <span class="field-label">最大高度</span>
+                <input id="maxHeightInput" class="field-input" type="number" min="1" placeholder="例如 2048" />
+              </label>
+            </div>
+
+            <div class="checkbox-row">
+              <label class="checkbox-field">
+                <input id="keepAspectCheckbox" type="checkbox" checked />
+                <span>保持原始比例</span>
+              </label>
+
+              <label class="checkbox-field">
+                <input id="onlyShrinkCheckbox" type="checkbox" checked />
+                <span>仅缩小，不放大</span>
+              </label>
+            </div>
+
+            <div class="quality-panel">
+              <div class="quality-head">
+                <span class="field-label">压缩质量</span>
+                <strong id="qualityValueLabel" class="quality-value">90</strong>
+              </div>
+              <input id="qualityInput" class="quality-slider" type="range" min="1" max="100" step="1" value="90" />
+              <p class="quality-hint">仅对 JPG / JPEG / WEBP 生效，PNG 会保持无损格式。</p>
+            </div>
+
+            <div class="conversion-panel">
+              <label class="field">
+                <span class="field-label">输出格式</span>
+                <select id="outputFormatSelect" class="field-input">
+                  <option value="keep" selected>不转换</option>
+                  <option value="jpg">全部转换成 JPG</option>
+                  <option value="webp">全部转换成 WEBP</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="conversion-panel">
+              <div class="field">
+                <span class="field-label">输出方式</span>
+                <div class="segmented-control" role="group" aria-label="输出方式">
+                  <button
+                    id="resultModeReplaceButton"
+                    class="segmented-button active"
+                    type="button"
+                    data-result-mode="replace"
+                    aria-pressed="true"
+                  >
+                    替换原图
+                  </button>
+                  <button
+                    id="resultModeDuplicateButton"
+                    class="segmented-button"
+                    type="button"
+                    data-result-mode="duplicate"
+                    aria-pressed="false"
+                  >
+                    创建副本
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="list-panel">
+            <div class="panel-head">
+              <strong>待处理项目</strong>
+              <span id="listHint" class="panel-hint">会根据当前宽高限制生成处理预览，并仅处理常见静态图片格式。</span>
+            </div>
+
+            <div id="selectionList" class="selection-list" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <header class="toolbar toolbar-bottom">
+          <div class="toolbar-summary">
+            <span class="summary-metric">已选择项目 <strong id="selectedCount">0</strong></span>
+            <span class="summary-metric">待处理项目 <strong id="processableCount">0</strong></span>
+          </div>
+          <div class="toolbar-actions">
+            <button id="refreshSelectionButton" class="ghost-button" type="button">刷新已选项目</button>
+            <button id="runButton" class="primary-action-button" type="button" disabled>开始处理</button>
+          </div>
+        </header>
+      </main>
+
+      <div id="dialogRoot" class="dialog-root" hidden>
+        <div id="dialogBackdrop" class="dialog-backdrop"></div>
+        <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogMessage">
+          <div class="dialog-content">
+            <div id="dialogIcon" class="dialog-icon info" aria-hidden="true">i</div>
+            <div class="dialog-copy">
+              <h2 id="dialogTitle" class="dialog-title">提示</h2>
+              <p id="dialogMessage" class="dialog-message"></p>
+            </div>
+          </div>
+          <div id="dialogActions" class="dialog-actions single">
+            <button id="dialogCancelButton" class="ghost-button" type="button" hidden>取消</button>
+            <button id="dialogConfirmButton" class="primary-action-button" type="button">确认</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/vendor-pica.min.js"></script>
+    <script src="js/plugin.js"></script>
+  </body>
+</html>
