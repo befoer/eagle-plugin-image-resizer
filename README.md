@@ -88,6 +88,6 @@ image-size-batch-resizer/
 - 界面风格：深色系，贴近 Eagle 官方插件风格
 - 缩放方案：`Pica (mks2013)`，并保留浏览器画布兜底逻辑
 
-## License
+## 项目地址
 
-如需开源发布，可在仓库中补充 `LICENSE` 文件后再更新此处说明。
+https://github.com/befoer/eagle-plugin-image-resizer
