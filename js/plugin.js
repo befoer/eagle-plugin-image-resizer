@@ -5,6 +5,15 @@ const SUPPORTED_FORMATS = {
   webp: { mime: "image/webp", extension: ".webp", qualityType: "lossy" },
 };
 
+const INPUT_MIME_BY_EXTENSION = {
+  gif: "image/gif",
+};
+
+const OPTIONAL_SOURCE_FORMATS = {
+  gif: { checkboxId: "convertGifCheckbox", optionId: "convertGifOption", label: "GIF" },
+  webp: { checkboxId: "convertWebpCheckbox", optionId: "convertWebpOption", label: "WEBP" },
+};
+
 const state = {
   selectedItems: [],
   busy: false,
@@ -279,6 +288,10 @@ function readSettings() {
   const qualityValue = Number(getEl("qualityInput")?.value ?? "100");
   const convertFormat = String(getEl("outputFormatSelect")?.value ?? "keep");
   const resultMode = getSelectedResultMode();
+  const convertOptionalFormats = {};
+  Object.entries(OPTIONAL_SOURCE_FORMATS).forEach(([extension, config]) => {
+    convertOptionalFormats[extension] = Boolean(getEl(config.checkboxId)?.checked);
+  });
 
   if (!Number.isFinite(qualityValue) || qualityValue < 1 || qualityValue > 100) {
     throw new Error("压缩质量必须在 1 到 100 之间。");
@@ -303,6 +316,7 @@ function readSettings() {
     onlyShrink: Boolean(getEl("onlyShrinkCheckbox")?.checked),
     qualityPercent: Math.round(qualityValue),
     convertFormat,
+    convertOptionalFormats,
     resultMode,
   };
 }
@@ -319,6 +333,43 @@ function normalizeExtension(item) {
   }
 
   return "";
+}
+
+function getSourceFormatLabel(extension) {
+  return OPTIONAL_SOURCE_FORMATS[extension]?.label || (extension ? extension.toUpperCase() : "未知");
+}
+
+function isOptionalSourceFormat(extension) {
+  return Object.prototype.hasOwnProperty.call(OPTIONAL_SOURCE_FORMATS, extension);
+}
+
+function isOptionalSourceFormatEnabled(extension, settings) {
+  return Boolean(settings.convertOptionalFormats?.[extension]);
+}
+
+function updateOptionalSourceFormatControls() {
+  const panel = getEl("optionalSourceFormatPanel");
+  if (!panel) {
+    return;
+  }
+
+  const selectedExtensions = new Set(state.selectedItems.map((item) => normalizeExtension(item)).filter(Boolean));
+  let hasVisibleOption = false;
+
+  Object.entries(OPTIONAL_SOURCE_FORMATS).forEach(([extension, config]) => {
+    const option = getEl(config.optionId);
+    const isVisible = selectedExtensions.has(extension);
+    if (option) {
+      option.hidden = !isVisible;
+    }
+    hasVisibleOption = hasVisibleOption || isVisible;
+  });
+
+  panel.hidden = !hasVisibleOption;
+}
+
+function resolveInputMime(extension) {
+  return SUPPORTED_FORMATS[extension]?.mime || INPUT_MIME_BY_EXTENSION[extension] || "application/octet-stream";
 }
 
 function buildDisplayName(item) {
@@ -514,14 +565,42 @@ function computeTargetSize(item, settings) {
 
 function createPlanEntry(item, settings) {
   const extension = normalizeExtension(item);
-  const outputFormat = resolveOutputFormat(item, settings);
+  const sourceFormatLabel = getSourceFormatLabel(extension);
   const sourceSizeBytes = state.sourceSizeById.get(item?.id) ?? getKnownItemSizeBytes(item);
+
+  if (isOptionalSourceFormat(extension) && !isOptionalSourceFormatEnabled(extension, settings)) {
+    return {
+      item,
+      status: "skip",
+      message: `已跳过 ${sourceFormatLabel}：勾选“转换 ${sourceFormatLabel}”后才会处理`,
+      outputFormat: null,
+      targetWidth: null,
+      targetHeight: null,
+      sourceSizeBytes,
+      outputSizeBytes: null,
+    };
+  }
+
+  if (extension === "gif" && settings.convertFormat === "keep") {
+    return {
+      item,
+      status: "skip",
+      message: "GIF 需要选择 JPG 或 WEBP 输出格式后再转换",
+      outputFormat: null,
+      targetWidth: null,
+      targetHeight: null,
+      sourceSizeBytes,
+      outputSizeBytes: null,
+    };
+  }
+
+  const outputFormat = resolveOutputFormat(item, settings);
 
   if (!outputFormat) {
     return {
       item,
       status: "skip",
-      message: `暂不支持 ${extension || "未知"} 格式`,
+      message: `暂不支持 ${sourceFormatLabel} 格式`,
       outputFormat: null,
       targetWidth: null,
       targetHeight: null,
@@ -546,15 +625,23 @@ function createPlanEntry(item, settings) {
   const resizeResult = computeTargetSize(item, settings);
   const needsFormatConversion = settings.convertFormat !== "keep";
   const needsRecompression = outputFormat.qualityType === "lossy" && settings.qualityPercent < 100;
-  const shouldProcess = resizeResult.status === "ready" || needsFormatConversion || needsRecompression;
+  const hasDrawableTarget =
+    Number.isFinite(resizeResult.targetWidth) &&
+    Number.isFinite(resizeResult.targetHeight) &&
+    resizeResult.targetWidth > 0 &&
+    resizeResult.targetHeight > 0;
+  const shouldProcess = hasDrawableTarget && (resizeResult.status === "ready" || needsFormatConversion || needsRecompression);
   const qualityDescription =
     outputFormat.qualityType === "lossless"
       ? "保持原格式无损输出"
       : `质量 ${settings.qualityPercent}`;
   const formatDescription = describeFormatConversion(item, settings, outputFormat);
   const resultModeDescription = describeResultMode(settings);
-  const operationDescription =
-    resizeResult.status === "ready" ? resizeResult.message : `尺寸保持 ${formatSize(item.width, item.height)}`;
+  const operationDescription = hasDrawableTarget
+    ? resizeResult.status === "ready"
+      ? resizeResult.message
+      : `尺寸保持 ${formatSize(item.width, item.height)}`
+    : resizeResult.message;
 
   return {
     item,
@@ -621,6 +708,48 @@ function renderOutputSizeCell(entry) {
   )}</span>`;
 }
 
+function getCompressionChangePercent(entry) {
+  const sourceSizeBytes = Number(entry.sourceSizeBytes);
+  const outputSizeBytes = Number(entry.outputSizeBytes);
+
+  if (!Number.isFinite(sourceSizeBytes) || sourceSizeBytes <= 0 || !Number.isFinite(outputSizeBytes) || outputSizeBytes < 0) {
+    return null;
+  }
+
+  const percent = ((sourceSizeBytes - outputSizeBytes) / sourceSizeBytes) * 100;
+  return Number.isFinite(percent) ? percent : null;
+}
+
+function formatCompressionPercent(percent) {
+  const absolutePercent = Math.abs(percent);
+  if (absolutePercent > 0 && absolutePercent < 1) {
+    return "<1%";
+  }
+
+  return `${Math.round(absolutePercent)}%`;
+}
+
+function renderCompressionRatioCell(entry) {
+  if (entry.status !== "done") {
+    return '<span class="selection-ratio-empty">—</span>';
+  }
+
+  const percent = getCompressionChangePercent(entry);
+  if (percent === null) {
+    return '<span class="selection-ratio-empty">—</span>';
+  }
+
+  if (percent > 0) {
+    return `<span class="selection-compression-ratio down">${formatCompressionPercent(percent)} ↓</span>`;
+  }
+
+  if (percent < 0) {
+    return `<span class="selection-compression-ratio up">${formatCompressionPercent(percent)} ↑</span>`;
+  }
+
+  return '<span class="selection-compression-ratio neutral">0%</span>';
+}
+
 function renderSelectionList() {
   const container = getEl("selectionList");
   if (!container) {
@@ -643,6 +772,7 @@ function renderSelectionList() {
       <div class="selection-list-head-sizes">
         <span>原大小</span>
         <span>压缩后</span>
+        <span>压缩率</span>
       </div>
     </div>
   `;
@@ -666,6 +796,9 @@ function renderSelectionList() {
             <div class="selection-size-cell">
               ${renderOutputSizeCell(entry)}
             </div>
+            <div class="selection-size-cell">
+              ${renderCompressionRatioCell(entry)}
+            </div>
           </div>
         </div>
       `;
@@ -680,6 +813,9 @@ function updateActionState() {
   setDisabled("dimensionLockButton", state.busy);
   setDisabled("resultModeReplaceButton", state.busy);
   setDisabled("resultModeDuplicateButton", state.busy);
+  Object.values(OPTIONAL_SOURCE_FORMATS).forEach(({ checkboxId }) => {
+    setDisabled(checkboxId, state.busy);
+  });
 }
 
 async function readSelectedItems() {
@@ -689,6 +825,7 @@ async function readSelectedItems() {
     state.selectedItems = [];
     state.plan = [];
     state.sourceSizeById.clear();
+    updateOptionalSourceFormatControls();
     renderSelectionList();
     updateActionState();
     return;
@@ -700,12 +837,14 @@ async function readSelectedItems() {
     await hydrateSourceSizes(state.selectedItems);
     state.lastSelectionRefreshAt = Date.now();
     setText("selectionHint", "");
-    setText("listHint", "仅处理 JPG / JPEG / PNG / WEBP 静态图片；支持尺寸调整、压缩质量调节和输出格式转换。");
+    setText("listHint", "JPG / JPEG / PNG 默认处理；GIF / WEBP 需在输出格式下方勾选转换后才处理。");
+    updateOptionalSourceFormatControls();
     derivePlan();
   } catch (error) {
     state.selectedItems = [];
     state.plan = [];
     state.sourceSizeById.clear();
+    updateOptionalSourceFormatControls();
     renderSelectionList();
     updateActionState();
     showNotice(`读取已选项目失败：${error?.message || error}`, {
@@ -769,7 +908,7 @@ async function loadSourceBlob(item, nodeRuntime) {
   if (item.filePath) {
     const fileBytes = await nodeRuntime.fs.promises.readFile(item.filePath);
     const extension = normalizeExtension(item);
-    const mime = SUPPORTED_FORMATS[extension]?.mime || "application/octet-stream";
+    const mime = resolveInputMime(extension);
     return new Blob([fileBytes], { type: mime });
   }
 
@@ -1106,6 +1245,12 @@ function bindEvents() {
     derivePlan();
   });
 
+  Object.values(OPTIONAL_SOURCE_FORMATS).forEach(({ checkboxId }) => {
+    getEl(checkboxId)?.addEventListener("change", () => {
+      derivePlan();
+    });
+  });
+
   document.querySelectorAll(".segmented-button[data-result-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       const nextMode = button.getAttribute("data-result-mode") || "replace";
@@ -1179,6 +1324,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setResultMode("replace");
   applyDimensionLockVisual();
   updateQualityLabel();
+  updateOptionalSourceFormatControls();
   renderSelectionList();
   updateActionState();
   if (window.eagle) {
